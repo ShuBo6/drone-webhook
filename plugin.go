@@ -8,13 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/drone/drone-template-lib/template"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-
-	"github.com/drone/drone-template-lib/template"
 )
 
 type (
@@ -24,19 +23,20 @@ type (
 	}
 
 	Build struct {
-		Tag      string `json:"tag"`
-		Event    string `json:"event"`
-		Number   int    `json:"number"`
-		Commit   string `json:"commit"`
-		Ref      string `json:"ref"`
-		Branch   string `json:"branch"`
-		Author   string `json:"author"`
-		Message  string `json:"message"`
-		Status   string `json:"status"`
-		Link     string `json:"link"`
-		DeployTo string `json:"deployTo"`
-		Started  int64  `json:"started"`
-		Created  int64  `json:"created"`
+		Tag         string `json:"tag"`
+		Event       string `json:"event"`
+		Number      int    `json:"number"`
+		Commit      string `json:"commit"`
+		Ref         string `json:"ref"`
+		Branch      string `json:"branch"`
+		Author      string `json:"author"`
+		Message     string `json:"message"`
+		Status      string `json:"status"`
+		Link        string `json:"link"`
+		DeployTo    string `json:"deployTo"`
+		Started     int64  `json:"started"`
+		Created     int64  `json:"created"`
+		ReleaseInfo string `json:"release_info"`
 	}
 
 	Config struct {
@@ -54,17 +54,40 @@ type (
 		SkipVerify      bool
 		SignatureHeader string
 		SignatureSecret string
+		ReleaseFile     string
 	}
 
 	Job struct {
 		Started int64
 	}
+	Commit struct {
+		Sha     string `json:"sha"`
+		Branch  string `json:"branch"`
+		Tag     string `json:"tag"`
+		Message string `json:"message"`
+		Author  string `json:"author"`
+		Repo    string `json:"repo"`
+	}
+	ReleaseInfo struct {
+		Version string `json:"version"`
+		Smb     string `json:"smb"`
+	}
+	Md5File struct {
+		FileName string `json:"file_name"`
+		Md5Sum   string `json:"md5_sum"`
+	}
+	Release struct {
+		Commit      Commit      `json:"commit"`
+		ReleaseInfo ReleaseInfo `json:"release_info"`
+		MD5         []Md5File   `json:"md5"`
+	}
 
 	Plugin struct {
-		Repo   Repo
-		Build  Build
-		Config Config
-		Job    Job
+		Repo    Repo
+		Build   Build
+		Config  Config
+		Release Release
+		Job     Job
 	}
 )
 
@@ -91,6 +114,20 @@ func (p Plugin) Exec() error {
 
 		b = buf.Bytes()
 	} else {
+		if len(p.Config.ReleaseFile) != 0 {
+			releaseFileContent, err := os.ReadFile(p.Config.ReleaseFile)
+			if err != nil {
+				fmt.Printf("Error: Failed to read ReleaseFile. %s,path:%s\n", err.Error(), p.Config.ReleaseFile)
+				return err
+			}
+			err = json.Unmarshal(releaseFileContent, &p.Release)
+			if err != nil {
+				fmt.Printf("Error: Failed Unmarshal releaseFileContent. %s\n", err.Error())
+				return err
+			}
+			fmt.Println("ReleaseFileContent:", string(releaseFileContent))
+		}
+
 		txt, err := template.RenderTrim(p.Config.Template, p)
 
 		if err != nil {
